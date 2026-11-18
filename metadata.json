@@ -1,0 +1,6 @@
+{
+  "name": "SPLENDORA CINEMA — APNE BEECH",
+  "description": "Royal vintage cinema ticket booking platform and administrative suite for Splendora Cinema featuring APNE BEECH.",
+  "requestFramePermissions": ["camera"],
+  "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
+}

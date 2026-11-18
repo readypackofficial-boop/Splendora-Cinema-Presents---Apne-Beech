@@ -1,0 +1,470 @@
+{
+  "entities": {
+    "Admin": {
+      "title": "Admin",
+      "description": "Authorized cinema administrator record keyed by lowercase email.",
+      "type": "object",
+      "properties": {
+        "email": { "type": "string", "maxLength": 200 },
+        "role": { "type": "string", "enum": ["SUPER_ADMIN", "ADMIN", "STAFF"], "maxLength": 32 },
+        "active": { "type": "boolean" },
+        "addedBy": { "type": "string", "maxLength": 200 },
+        "permissions": { "type": "object" },
+        "createdAt": { "type": "string", "format": "date-time" },
+        "updatedAt": { "type": "string", "format": "date-time" }
+      },
+      "required": ["email", "role", "active", "addedBy", "createdAt", "updatedAt"]
+    },
+    "User": {
+      "title": "User",
+      "description": "Private customer profile (PII isolated to owner or admin).",
+      "type": "object",
+      "properties": {
+        "uid": { "type": "string", "maxLength": 128, "pattern": "^[a-zA-Z0-9_\\-]+$" },
+        "email": { "type": "string", "maxLength": 200 },
+        "displayName": { "type": "string", "maxLength": 150 },
+        "phone": { "type": "string", "maxLength": 30 },
+        "createdAt": { "type": "string", "format": "date-time" },
+        "updatedAt": { "type": "string", "format": "date-time" }
+      },
+      "required": ["uid", "email", "displayName", "createdAt", "updatedAt"]
+    },
+    "Movie": {
+      "title": "Movie",
+      "description": "Featured film catalog record editable by admins.",
+      "type": "object",
+      "properties": {
+        "movieId": { "type": "string", "maxLength": 128, "pattern": "^[a-zA-Z0-9_\\-]+$" },
+        "title": { "type": "string", "maxLength": 180 },
+        "posterUrl": { "type": "string", "maxLength": 800000 },
+        "trailerUrl": { "type": "string", "maxLength": 2000 },
+        "description": { "type": "string", "maxLength": 5000 },
+        "language": { "type": "string", "maxLength": 100 },
+        "genre": { "type": "string", "maxLength": 120 },
+        "duration": { "type": "string", "maxLength": 60 },
+        "castAndCrew": { "type": "string", "maxLength": 1000 },
+        "certificate": { "type": "string", "maxLength": 30 },
+        "releaseNote": { "type": "string", "maxLength": 500 },
+        "active": { "type": "boolean" },
+        "createdAt": { "type": "string", "format": "date-time" },
+        "updatedAt": { "type": "string", "format": "date-time" }
+      },
+      "required": ["movieId", "title", "active", "updatedAt"]
+    },
+    "CastMember": {
+      "title": "CastMember",
+      "description": "Main cast and crew profile with portrait photo editable by admins.",
+      "type": "object",
+      "properties": {
+        "castId": { "type": "string", "maxLength": 128, "pattern": "^[a-zA-Z0-9_\\-]+$" },
+        "movieId": { "type": "string", "maxLength": 128, "pattern": "^[a-zA-Z0-9_\\-]+$" },
+        "name": { "type": "string", "maxLength": 150 },
+        "role": { "type": "string", "maxLength": 150 },
+        "photoUrl": { "type": "string", "maxLength": 800000 },
+        "order": { "type": "number" },
+        "createdAt": { "type": "string", "format": "date-time" },
+        "updatedAt": { "type": "string", "format": "date-time" }
+      },
+      "required": ["castId", "movieId", "name", "role", "photoUrl", "order", "createdAt", "updatedAt"]
+    },
+    "Screening": {
+      "title": "Screening",
+      "description": "Individual cinema showtime with independent seat inventory.",
+      "type": "object",
+      "properties": {
+        "screeningId": { "type": "string", "maxLength": 128, "pattern": "^[a-zA-Z0-9_\\-]+$" },
+        "movieId": { "type": "string", "maxLength": 128, "pattern": "^[a-zA-Z0-9_\\-]+$" },
+        "movieTitle": { "type": "string", "maxLength": 180 },
+        "posterUrl": { "type": "string", "maxLength": 800000 },
+        "date": { "type": "string", "maxLength": 20, "pattern": "^\\d{4}-\\d{2}-\\d{2}$" },
+        "startTime": { "type": "string", "maxLength": 30 },
+        "endTime": { "type": "string", "maxLength": 30 },
+        "ticketPrice": { "type": "number" },
+        "rowPrices": { "type": "object" },
+        "seatCapacity": { "type": "number" },
+        "bookedCount": { "type": "number" },
+        "salesStatus": { "type": "string", "enum": ["OPEN", "CLOSED", "CANCELLED", "COMPLETED"], "maxLength": 30 },
+        "isPublished": { "type": "boolean" },
+        "description": { "type": "string", "maxLength": 1000 },
+        "createdAt": { "type": "string", "format": "date-time" },
+        "updatedAt": { "type": "string", "format": "date-time" }
+      },
+      "required": ["screeningId", "movieId", "movieTitle", "date", "startTime", "endTime", "ticketPrice", "seatCapacity", "bookedCount", "salesStatus", "isPublished", "createdAt", "updatedAt"]
+    },
+    "Seat": {
+      "title": "Seat",
+      "description": "Independent seat state per screening ID (A1-F6).",
+      "type": "object",
+      "properties": {
+        "seatDocId": { "type": "string", "maxLength": 160, "pattern": "^[a-zA-Z0-9_\\-]+$" },
+        "screeningId": { "type": "string", "maxLength": 128, "pattern": "^[a-zA-Z0-9_\\-]+$" },
+        "seatNumber": { "type": "string", "maxLength": 10, "pattern": "^[A-Z][0-9]{1,2}$" },
+        "row": { "type": "string", "maxLength": 5 },
+        "col": { "type": "number" },
+        "status": { "type": "string", "enum": ["AVAILABLE", "HELD", "RESERVED", "BOOKED", "BLOCKED"], "maxLength": 20 },
+        "heldByUid": { "type": "string", "maxLength": 128 },
+        "holdExpiresAt": { "type": "string", "format": "date-time" },
+        "bookingId": { "type": "string", "maxLength": 128 },
+        "blockedReason": { "type": "string", "maxLength": 200 },
+        "updatedAt": { "type": "string", "format": "date-time" }
+      },
+      "required": ["seatDocId", "screeningId", "seatNumber", "row", "col", "status", "updatedAt"]
+    },
+    "Booking": {
+      "title": "Booking",
+      "description": "Customer ticket and mocktail booking record.",
+      "type": "object",
+      "properties": {
+        "bookingId": { "type": "string", "maxLength": 128, "pattern": "^[a-zA-Z0-9_\\-]+$" },
+        "screeningId": { "type": "string", "maxLength": 128, "pattern": "^[a-zA-Z0-9_\\-]+$" },
+        "movieTitle": { "type": "string", "maxLength": 180 },
+        "date": { "type": "string", "maxLength": 20 },
+        "startTime": { "type": "string", "maxLength": 30 },
+        "customerId": { "type": "string", "maxLength": 128 },
+        "customerName": { "type": "string", "maxLength": 150 },
+        "customerEmail": { "type": "string", "maxLength": 200 },
+        "customerPhone": { "type": "string", "maxLength": 30 },
+        "seatNumbers": { "type": "array" },
+        "ticketPrice": { "type": "number" },
+        "ticketCount": { "type": "number" },
+        "ticketSubtotal": { "type": "number" },
+        "mocktailSubtotal": { "type": "number" },
+        "discountType": { "type": "string", "enum": ["NONE", "FLAT", "PERCENT"], "maxLength": 20 },
+        "discountValue": { "type": "number" },
+        "discountAmount": { "type": "number" },
+        "discountReason": { "type": "string", "maxLength": 200 },
+        "complimentaryDrinks": { "type": "boolean" },
+        "grandTotal": { "type": "number" },
+        "paymentStatus": { "type": "string", "enum": ["PENDING", "PENDING_VERIFICATION", "VERIFIED", "FAILED", "CANCELLED", "REFUNDED"], "maxLength": 30 },
+        "bookingStatus": { "type": "string", "enum": ["HOLD", "PENDING_VERIFICATION", "CONFIRMED", "CANCELLED"], "maxLength": 30 },
+        "upiTransactionRef": { "type": "string", "maxLength": 120 },
+        "paymentMethod": { "type": "string", "maxLength": 40 },
+        "adminNotes": { "type": "string", "maxLength": 500 },
+        "refundStatus": { "type": "string", "maxLength": 30 },
+        "createdAt": { "type": "string", "format": "date-time" },
+        "updatedAt": { "type": "string", "format": "date-time" }
+      },
+      "required": ["bookingId", "screeningId", "movieTitle", "date", "startTime", "customerId", "customerName", "customerEmail", "customerPhone", "seatNumbers", "ticketPrice", "ticketCount", "ticketSubtotal", "mocktailSubtotal", "grandTotal", "paymentStatus", "bookingStatus", "createdAt", "updatedAt"]
+    },
+    "Payment": {
+      "title": "Payment",
+      "description": "Payment verification and audit record.",
+      "type": "object",
+      "properties": {
+        "paymentId": { "type": "string", "maxLength": 128, "pattern": "^[a-zA-Z0-9_\\-]+$" },
+        "bookingId": { "type": "string", "maxLength": 128, "pattern": "^[a-zA-Z0-9_\\-]+$" },
+        "screeningId": { "type": "string", "maxLength": 128, "pattern": "^[a-zA-Z0-9_\\-]+$" },
+        "customerId": { "type": "string", "maxLength": 128 },
+        "customerName": { "type": "string", "maxLength": 150 },
+        "customerEmail": { "type": "string", "maxLength": 200 },
+        "amount": { "type": "number" },
+        "method": { "type": "string", "maxLength": 40 },
+        "status": { "type": "string", "enum": ["PENDING", "PENDING_VERIFICATION", "VERIFIED", "REJECTED", "FAILED", "REFUNDED"], "maxLength": 30 },
+        "transactionRef": { "type": "string", "maxLength": 120 },
+        "gatewayOrderId": { "type": "string", "maxLength": 120 },
+        "gatewayPaymentId": { "type": "string", "maxLength": 120 },
+        "verifiedBy": { "type": "string", "maxLength": 200 },
+        "verifiedAt": { "type": "string", "format": "date-time" },
+        "notes": { "type": "string", "maxLength": 500 },
+        "createdAt": { "type": "string", "format": "date-time" },
+        "updatedAt": { "type": "string", "format": "date-time" }
+      },
+      "required": ["paymentId", "bookingId", "screeningId", "customerId", "customerName", "customerEmail", "amount", "method", "status", "createdAt", "updatedAt"]
+    },
+    "Ticket": {
+      "title": "Ticket",
+      "description": "Verified digital QR ticket issued only after payment verification.",
+      "type": "object",
+      "properties": {
+        "ticketId": { "type": "string", "maxLength": 128, "pattern": "^[a-zA-Z0-9_\\-]+$" },
+        "bookingId": { "type": "string", "maxLength": 128, "pattern": "^[a-zA-Z0-9_\\-]+$" },
+        "screeningId": { "type": "string", "maxLength": 128, "pattern": "^[a-zA-Z0-9_\\-]+$" },
+        "customerId": { "type": "string", "maxLength": 128 },
+        "customerName": { "type": "string", "maxLength": 150 },
+        "customerEmail": { "type": "string", "maxLength": 200 },
+        "movieTitle": { "type": "string", "maxLength": 180 },
+        "date": { "type": "string", "maxLength": 20 },
+        "startTime": { "type": "string", "maxLength": 30 },
+        "seatNumbers": { "type": "array" },
+        "mocktailSummary": { "type": "string", "maxLength": 1000 },
+        "discountAmount": { "type": "number" },
+        "discountReason": { "type": "string", "maxLength": 200 },
+        "complimentaryDrinks": { "type": "boolean" },
+        "grandTotal": { "type": "number" },
+        "qrPayload": { "type": "string", "maxLength": 500 },
+        "ticketStatus": { "type": "string", "enum": ["VALID", "USED", "CANCELLED"], "maxLength": 20 },
+        "checkedInAt": { "type": "string", "format": "date-time" },
+        "checkedInBy": { "type": "string", "maxLength": 200 },
+        "createdAt": { "type": "string", "format": "date-time" },
+        "updatedAt": { "type": "string", "format": "date-time" }
+      },
+      "required": ["ticketId", "bookingId", "screeningId", "customerId", "customerName", "customerEmail", "movieTitle", "date", "startTime", "seatNumbers", "mocktailSummary", "grandTotal", "qrPayload", "ticketStatus", "createdAt", "updatedAt"]
+    },
+    "TicketSecurity": {
+      "title": "TicketSecurity",
+      "description": "Admin-only cryptographic token hash for ticket verification.",
+      "type": "object",
+      "properties": {
+        "secureTokenHash": { "type": "string", "maxLength": 128 },
+        "ticketId": { "type": "string", "maxLength": 128 },
+        "createdAt": { "type": "string", "format": "date-time" }
+      },
+      "required": ["secureTokenHash", "ticketId", "createdAt"]
+    },
+    "MocktailProduct": {
+      "title": "MocktailProduct",
+      "description": "Optional in-seat mocktail beverage item.",
+      "type": "object",
+      "properties": {
+        "productId": { "type": "string", "maxLength": 128, "pattern": "^[a-zA-Z0-9_\\-]+$" },
+        "name": { "type": "string", "maxLength": 120 },
+        "description": { "type": "string", "maxLength": 500 },
+        "price": { "type": "number" },
+        "imageUrl": { "type": "string", "maxLength": 200000 },
+        "enabled": { "type": "boolean" },
+        "createdAt": { "type": "string", "format": "date-time" },
+        "updatedAt": { "type": "string", "format": "date-time" }
+      },
+      "required": ["productId", "name", "description", "price", "imageUrl", "enabled", "createdAt", "updatedAt"]
+    },
+    "MocktailOrder": {
+      "title": "MocktailOrder",
+      "description": "Customer mocktail order summary tied to a booking.",
+      "type": "object",
+      "properties": {
+        "orderId": { "type": "string", "maxLength": 128, "pattern": "^[a-zA-Z0-9_\\-]+$" },
+        "bookingId": { "type": "string", "maxLength": 128 },
+        "screeningId": { "type": "string", "maxLength": 128 },
+        "customerId": { "type": "string", "maxLength": 128 },
+        "customerName": { "type": "string", "maxLength": 150 },
+        "date": { "type": "string", "maxLength": 20 },
+        "startTime": { "type": "string", "maxLength": 30 },
+        "items": { "type": "array" },
+        "subtotal": { "type": "number" },
+        "paymentStatus": { "type": "string", "maxLength": 30 },
+        "deliveryStatus": { "type": "string", "enum": ["PENDING_PAYMENT", "PREPARING", "READY", "DELIVERED", "CANCELLED"], "maxLength": 30 },
+        "createdAt": { "type": "string", "format": "date-time" },
+        "updatedAt": { "type": "string", "format": "date-time" }
+      },
+      "required": ["orderId", "bookingId", "screeningId", "customerId", "customerName", "date", "startTime", "items", "subtotal", "paymentStatus", "deliveryStatus", "createdAt", "updatedAt"]
+    },
+    "MocktailAssignment": {
+      "title": "MocktailAssignment",
+      "description": "Seat-wise mocktail delivery line item.",
+      "type": "object",
+      "properties": {
+        "assignmentId": { "type": "string", "maxLength": 128, "pattern": "^[a-zA-Z0-9_\\-]+$" },
+        "bookingId": { "type": "string", "maxLength": 128 },
+        "screeningId": { "type": "string", "maxLength": 128 },
+        "customerId": { "type": "string", "maxLength": 128 },
+        "customerName": { "type": "string", "maxLength": 150 },
+        "date": { "type": "string", "maxLength": 20 },
+        "startTime": { "type": "string", "maxLength": 30 },
+        "seatNumber": { "type": "string", "maxLength": 10 },
+        "productId": { "type": "string", "maxLength": 128 },
+        "productName": { "type": "string", "maxLength": 120 },
+        "quantity": { "type": "number" },
+        "unitPrice": { "type": "number" },
+        "paymentStatus": { "type": "string", "maxLength": 30 },
+        "deliveryStatus": { "type": "string", "enum": ["PENDING_PAYMENT", "PREPARING", "READY", "DELIVERED", "CANCELLED"], "maxLength": 30 },
+        "createdAt": { "type": "string", "format": "date-time" },
+        "updatedAt": { "type": "string", "format": "date-time" }
+      },
+      "required": ["assignmentId", "bookingId", "screeningId", "customerId", "customerName", "date", "startTime", "seatNumber", "productId", "productName", "quantity", "unitPrice", "paymentStatus", "deliveryStatus", "createdAt", "updatedAt"]
+    },
+    "Refund": {
+      "title": "Refund",
+      "description": "Cancellation and refund tracking record.",
+      "type": "object",
+      "properties": {
+        "refundId": { "type": "string", "maxLength": 128, "pattern": "^[a-zA-Z0-9_\\-]+$" },
+        "bookingId": { "type": "string", "maxLength": 128 },
+        "screeningId": { "type": "string", "maxLength": 128 },
+        "customerId": { "type": "string", "maxLength": 128 },
+        "customerName": { "type": "string", "maxLength": 150 },
+        "customerEmail": { "type": "string", "maxLength": 200 },
+        "amount": { "type": "number" },
+        "reason": { "type": "string", "maxLength": 500 },
+        "refundStatus": { "type": "string", "enum": ["PENDING", "PROCESSED", "NOT_APPLICABLE"], "maxLength": 30 },
+        "notificationStatus": { "type": "string", "enum": ["PENDING", "SENT"], "maxLength": 30 },
+        "processedBy": { "type": "string", "maxLength": 200 },
+        "createdAt": { "type": "string", "format": "date-time" },
+        "updatedAt": { "type": "string", "format": "date-time" }
+      },
+      "required": ["refundId", "bookingId", "screeningId", "customerId", "customerName", "customerEmail", "amount", "reason", "refundStatus", "notificationStatus", "processedBy", "createdAt", "updatedAt"]
+    },
+    "WebsiteSetting": {
+      "title": "WebsiteSetting",
+      "description": "Public cinema branding, contact details, policies, and footer settings.",
+      "type": "object",
+      "properties": {
+        "cinemaName": { "type": "string", "maxLength": 150 },
+        "logoUrl": { "type": "string", "maxLength": 800000 },
+        "heroBannerUrl": { "type": "string", "maxLength": 800000 },
+        "announcementText": { "type": "string", "maxLength": 300 },
+        "contactNumber": { "type": "string", "maxLength": 60 },
+        "contactEmail": { "type": "string", "maxLength": 200 },
+        "cinemaAddress": { "type": "string", "maxLength": 500 },
+        "instagramUrl": { "type": "string", "maxLength": 500 },
+        "facebookUrl": { "type": "string", "maxLength": 500 },
+        "youtubeUrl": { "type": "string", "maxLength": 500 },
+        "bookingPolicies": { "type": "string", "maxLength": 3000 },
+        "footerText": { "type": "string", "maxLength": 500 },
+        "theme": {
+          "type": "object",
+          "properties": {
+            "presetId": { "type": "string", "maxLength": 40 },
+            "primary": { "type": "string", "pattern": "^#[0-9A-Fa-f]{6}$" },
+            "primaryHover": { "type": "string", "pattern": "^#[0-9A-Fa-f]{6}$" },
+            "dark": { "type": "string", "pattern": "^#[0-9A-Fa-f]{6}$" },
+            "darkDeep": { "type": "string", "pattern": "^#[0-9A-Fa-f]{6}$" },
+            "accent": { "type": "string", "pattern": "^#[0-9A-Fa-f]{6}$" },
+            "accentLight": { "type": "string", "pattern": "^#[0-9A-Fa-f]{6}$" },
+            "bg": { "type": "string", "pattern": "^#[0-9A-Fa-f]{6}$" },
+            "surface": { "type": "string", "pattern": "^#[0-9A-Fa-f]{6}$" },
+            "surfaceAlt": { "type": "string", "pattern": "^#[0-9A-Fa-f]{6}$" },
+            "text": { "type": "string", "pattern": "^#[0-9A-Fa-f]{6}$" },
+            "muted": { "type": "string", "pattern": "^#[0-9A-Fa-f]{6}$" }
+          }
+        },
+        "updatedAt": { "type": "string", "format": "date-time" }
+      },
+      "required": ["cinemaName", "updatedAt"]
+    },
+    "PaymentSettingPublic": {
+      "title": "PaymentSettingPublic",
+      "description": "Public payment configuration (UPI display details only, no secrets).",
+      "type": "object",
+      "properties": {
+        "isConfigured": { "type": "boolean" },
+        "mode": { "type": "string", "enum": ["UNCONFIGURED", "MANUAL_UPI", "AUTOMATIC_GATEWAY"], "maxLength": 30 },
+        "upiId": { "type": "string", "maxLength": 150 },
+        "displayName": { "type": "string", "maxLength": 150 },
+        "qrImageUrl": { "type": "string", "maxLength": 800000 },
+        "instructions": { "type": "string", "maxLength": 1000 },
+        "providerName": { "type": "string", "maxLength": 100 },
+        "testMode": { "type": "boolean" },
+        "updatedAt": { "type": "string", "format": "date-time" }
+      },
+      "required": ["isConfigured", "mode", "testMode", "updatedAt"]
+    },
+    "PaymentSettingPrivate": {
+      "title": "PaymentSettingPrivate",
+      "description": "Admin-only payment gateway API keys and webhook secrets.",
+      "type": "object",
+      "properties": {
+        "gatewayKeyId": { "type": "string", "maxLength": 200 },
+        "gatewayKeySecret": { "type": "string", "maxLength": 500 },
+        "webhookSecret": { "type": "string", "maxLength": 500 },
+        "updatedBy": { "type": "string", "maxLength": 200 },
+        "updatedAt": { "type": "string", "format": "date-time" }
+      },
+      "required": ["updatedBy", "updatedAt"]
+    },
+    "AuditLog": {
+      "title": "AuditLog",
+      "description": "Immutable administrative activity audit trail.",
+      "type": "object",
+      "properties": {
+        "logId": { "type": "string", "maxLength": 128, "pattern": "^[a-zA-Z0-9_\\-]+$" },
+        "action": { "type": "string", "maxLength": 100 },
+        "actorEmail": { "type": "string", "maxLength": 200 },
+        "actorUid": { "type": "string", "maxLength": 128 },
+        "targetType": { "type": "string", "maxLength": 60 },
+        "targetId": { "type": "string", "maxLength": 128 },
+        "details": { "type": "string", "maxLength": 1000 },
+        "createdAt": { "type": "string", "format": "date-time" }
+      },
+      "required": ["logId", "action", "actorEmail", "actorUid", "targetType", "targetId", "details", "createdAt"]
+    },
+    "SystemInit": {
+      "title": "SystemInit",
+      "description": "One-time initialization sentinel.",
+      "type": "object",
+      "properties": {
+        "initialized": { "type": "boolean" },
+        "initializedBy": { "type": "string", "maxLength": 200 },
+        "initializedAt": { "type": "string", "format": "date-time" }
+      },
+      "required": ["initialized", "initializedBy", "initializedAt"]
+    }
+  },
+  "firestore": {
+    "/admins/{adminEmail}": {
+      "schema": { "$ref": "#/entities/Admin" },
+      "description": "Authorized admin allowlist keyed by lowercase verified email."
+    },
+    "/users/{uid}": {
+      "schema": { "$ref": "#/entities/User" },
+      "description": "Customer profile PII isolated to owner or admin."
+    },
+    "/movies/{movieId}": {
+      "schema": { "$ref": "#/entities/Movie" },
+      "description": "Movie details editable by administrators."
+    },
+    "/castMembers/{castId}": {
+      "schema": { "$ref": "#/entities/CastMember" },
+      "description": "Featured film main cast and crew members with portrait photos."
+    },
+    "/screenings/{screeningId}": {
+      "schema": { "$ref": "#/entities/Screening" },
+      "description": "Show schedule records."
+    },
+    "/seats/{seatDocId}": {
+      "schema": { "$ref": "#/entities/Seat" },
+      "description": "Per-screening independent 6x6 seat states."
+    },
+    "/bookings/{bookingId}": {
+      "schema": { "$ref": "#/entities/Booking" },
+      "description": "Customer ticket and mocktail bookings."
+    },
+    "/payments/{paymentId}": {
+      "schema": { "$ref": "#/entities/Payment" },
+      "description": "Payment verification records."
+    },
+    "/tickets/{ticketId}": {
+      "schema": { "$ref": "#/entities/Ticket" },
+      "description": "Verified digital tickets."
+    },
+    "/tickets/{ticketId}/security/{secId}": {
+      "schema": { "$ref": "#/entities/TicketSecurity" },
+      "description": "Admin-only cryptographic verification hashes."
+    },
+    "/mocktailProducts/{productId}": {
+      "schema": { "$ref": "#/entities/MocktailProduct" },
+      "description": "Available mocktail menu items."
+    },
+    "/mocktailOrders/{orderId}": {
+      "schema": { "$ref": "#/entities/MocktailOrder" },
+      "description": "Mocktail orders connected to bookings."
+    },
+    "/mocktailAssignments/{assignmentId}": {
+      "schema": { "$ref": "#/entities/MocktailAssignment" },
+      "description": "Seat-wise mocktail delivery records."
+    },
+    "/refunds/{refundId}": {
+      "schema": { "$ref": "#/entities/Refund" },
+      "description": "Show/booking cancellation and refund logs."
+    },
+    "/websiteSettings/{settingId}": {
+      "schema": { "$ref": "#/entities/WebsiteSetting" },
+      "description": "Public cinema settings and contact information."
+    },
+    "/paymentSettings/public": {
+      "schema": { "$ref": "#/entities/PaymentSettingPublic" },
+      "description": "Public payment configuration without secrets."
+    },
+    "/paymentSettings/private": {
+      "schema": { "$ref": "#/entities/PaymentSettingPrivate" },
+      "description": "Admin-only payment gateway credentials."
+    },
+    "/auditLogs/{logId}": {
+      "schema": { "$ref": "#/entities/AuditLog" },
+      "description": "Immutable admin audit logs."
+    },
+    "/system/{docId}": {
+      "schema": { "$ref": "#/entities/SystemInit" },
+      "description": "System initialization state."
+    }
+  }
+}

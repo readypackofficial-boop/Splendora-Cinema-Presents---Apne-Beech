@@ -1,0 +1,733 @@
+rules_version = '2';
+service cloud.firestore {
+  match /databases/{database}/documents {
+
+    // 1. Global Safety Net (Default Deny)
+    match /{document=**} {
+      allow read, write: if false;
+    }
+
+    // 3. Primitive Helpers
+    function isValidId(id) {
+      return id is string && id.size() >= 1 && id.size() <= 128 && id.matches('^[a-zA-Z0-9_\\-]+$');
+    }
+
+    function isValidEmailId(email) {
+      return email is string && email.size() >= 5 && email.size() <= 200 && email.matches('^[a-zA-Z0-9._%+\\-]+@[a-zA-Z0-9.\\-]+\\.[a-zA-Z]{2,}$');
+    }
+
+    function incoming() {
+      return request.resource.data;
+    }
+
+    function existing() {
+      return resource.data;
+    }
+
+    function isSignedIn() {
+      return request.auth != null;
+    }
+
+    function isVerifiedUser() {
+      return isSignedIn() && request.auth.token.email_verified == true && request.auth.token.email is string;
+    }
+
+    function isBootstrapAdmin() {
+      return isVerifiedUser() && request.auth.token.email == 'mypersonaluse2013@gmail.com';
+    }
+
+    function adminDocData() {
+      return get(/databases/$(database)/documents/admins/$(request.auth.token.email)).data;
+    }
+
+    function isAdmin() {
+      return isVerifiedUser() && (
+        isBootstrapAdmin() ||
+        (
+          exists(/databases/$(database)/documents/admins/$(request.auth.token.email)) &&
+          adminDocData().active == true
+        )
+      );
+    }
+
+    function hasAdminFeature(feature) {
+      return isBootstrapAdmin() || (
+        isAdmin() && (
+          adminDocData().role == 'SUPER_ADMIN' ||
+          !('permissions' in adminDocData()) ||
+          (feature in adminDocData().permissions && adminDocData().permissions[feature] == true)
+        )
+      );
+    }
+
+    // Validation Blueprints
+    function isValidAdmin(data) {
+      return data.keys().hasAll(['email', 'role', 'active', 'addedBy', 'createdAt', 'updatedAt'])
+        && data.keys().hasOnly(['email', 'role', 'active', 'addedBy', 'permissions', 'createdAt', 'updatedAt'])
+        && data.email is string && data.email.size() >= 5 && data.email.size() <= 200
+        && data.role in ['SUPER_ADMIN', 'ADMIN', 'STAFF']
+        && data.active is bool
+        && data.addedBy is string && data.addedBy.size() <= 200
+        && (!('permissions' in data) || (
+          data.permissions is map &&
+          data.permissions.keys().hasOnly([
+            'managePaymentSettings',
+            'manageShowTimings',
+            'addShows',
+            'removeShows',
+            'manageShowPosters',
+            'manageAccessFeatures',
+            'manageMovies',
+            'manageBookingsAndPayments',
+            'boxOfficeCounter',
+            'manageSeats',
+            'manageMocktails',
+            'ticketScanner',
+            'manageWebsiteSettings',
+            'viewReportsAndLogs',
+            'manageTheme',
+            'manageRowPricing',
+            'grantDiscountsAndComps',
+            'printTickets'
+          ])
+        ))
+        && data.createdAt is timestamp
+        && data.updatedAt is timestamp;
+    }
+
+    function isValidUser(data) {
+      return data.keys().hasAll(['uid', 'email', 'displayName', 'createdAt', 'updatedAt'])
+        && data.keys().hasOnly(['uid', 'email', 'displayName', 'phone', 'createdAt', 'updatedAt'])
+        && data.uid is string && data.uid == request.auth.uid && data.uid.size() <= 128
+        && data.email is string && data.email.size() <= 200
+        && data.displayName is string && data.displayName.size() <= 150
+        && (!('phone' in data) || (data.phone is string && data.phone.size() <= 30))
+        && data.createdAt is timestamp
+        && data.updatedAt is timestamp;
+    }
+
+    function isValidMovie(data) {
+      return data.keys().hasAll(['movieId', 'title', 'active', 'updatedAt'])
+        && data.keys().hasOnly(['movieId', 'title', 'posterUrl', 'trailerUrl', 'description', 'language', 'genre', 'duration', 'castAndCrew', 'certificate', 'releaseNote', 'active', 'createdAt', 'updatedAt'])
+        && isValidId(data.movieId)
+        && data.title is string && data.title.size() >= 1 && data.title.size() <= 180
+        && data.active is bool
+        && (!('posterUrl' in data) || (data.posterUrl is string && data.posterUrl.size() <= 800000))
+        && (!('trailerUrl' in data) || (data.trailerUrl is string && data.trailerUrl.size() <= 2000))
+        && (!('description' in data) || (data.description is string && data.description.size() <= 5000))
+        && (!('language' in data) || (data.language is string && data.language.size() <= 100))
+        && (!('genre' in data) || (data.genre is string && data.genre.size() <= 120))
+        && (!('duration' in data) || (data.duration is string && data.duration.size() <= 60))
+        && (!('castAndCrew' in data) || (data.castAndCrew is string && data.castAndCrew.size() <= 1000))
+        && (!('certificate' in data) || (data.certificate is string && data.certificate.size() <= 30))
+        && (!('releaseNote' in data) || (data.releaseNote is string && data.releaseNote.size() <= 500))
+        && (!('createdAt' in data) || data.createdAt is timestamp)
+        && data.updatedAt is timestamp;
+    }
+
+    function isValidCastMember(data) {
+      return data.keys().hasAll(['castId', 'movieId', 'name', 'role', 'photoUrl', 'order', 'createdAt', 'updatedAt'])
+        && data.keys().hasOnly(['castId', 'movieId', 'name', 'role', 'photoUrl', 'order', 'createdAt', 'updatedAt'])
+        && isValidId(data.castId)
+        && isValidId(data.movieId)
+        && data.name is string && data.name.size() >= 1 && data.name.size() <= 150
+        && data.role is string && data.role.size() <= 150
+        && data.photoUrl is string && data.photoUrl.size() <= 800000
+        && data.order is number && data.order >= 0 && data.order <= 10000
+        && data.createdAt is timestamp
+        && data.updatedAt is timestamp;
+    }
+
+    function isValidRowPriceEntry(rp, key) {
+      return !(key in rp) || (rp[key] is number && rp[key] >= 0 && rp[key] <= 100000);
+    }
+
+    function isValidRowPrices(rp) {
+      return rp is map
+        && rp.keys().hasOnly(['A', 'B', 'C', 'D', 'E', 'F'])
+        && isValidRowPriceEntry(rp, 'A')
+        && isValidRowPriceEntry(rp, 'B')
+        && isValidRowPriceEntry(rp, 'C')
+        && isValidRowPriceEntry(rp, 'D')
+        && isValidRowPriceEntry(rp, 'E')
+        && isValidRowPriceEntry(rp, 'F');
+    }
+
+    function isValidScreening(data) {
+      return data.keys().hasAll(['screeningId', 'movieId', 'movieTitle', 'date', 'startTime', 'endTime', 'ticketPrice', 'seatCapacity', 'bookedCount', 'salesStatus', 'isPublished', 'createdAt', 'updatedAt'])
+        && data.keys().hasOnly(['screeningId', 'movieId', 'movieTitle', 'posterUrl', 'date', 'startTime', 'endTime', 'ticketPrice', 'rowPrices', 'seatCapacity', 'bookedCount', 'salesStatus', 'isPublished', 'description', 'createdAt', 'updatedAt'])
+        && isValidId(data.screeningId)
+        && isValidId(data.movieId)
+        && data.movieTitle is string && data.movieTitle.size() >= 1 && data.movieTitle.size() <= 180
+        && (!('posterUrl' in data) || (data.posterUrl is string && data.posterUrl.size() <= 800000))
+        && data.date is string && data.date.size() == 10 && data.date.matches('^\\d{4}-\\d{2}-\\d{2}$')
+        && data.startTime is string && data.startTime.size() <= 30
+        && data.endTime is string && data.endTime.size() <= 30
+        && data.ticketPrice is number && data.ticketPrice >= 0 && data.ticketPrice <= 100000
+        && (!('rowPrices' in data) || isValidRowPrices(data.rowPrices))
+        && data.seatCapacity is number && data.seatCapacity >= 1 && data.seatCapacity <= 500
+        && data.bookedCount is number && data.bookedCount >= 0 && data.bookedCount <= 500
+        && data.salesStatus in ['OPEN', 'CLOSED', 'CANCELLED', 'COMPLETED']
+        && data.isPublished is bool
+        && (!('description' in data) || (data.description is string && data.description.size() <= 1000))
+        && data.createdAt is timestamp
+        && data.updatedAt is timestamp;
+    }
+
+    function isValidSeat(data) {
+      return data.keys().hasAll(['seatDocId', 'screeningId', 'seatNumber', 'row', 'col', 'status', 'updatedAt'])
+        && data.keys().hasOnly(['seatDocId', 'screeningId', 'seatNumber', 'row', 'col', 'status', 'heldByUid', 'holdExpiresAt', 'bookingId', 'blockedReason', 'updatedAt'])
+        && isValidId(data.seatDocId)
+        && isValidId(data.screeningId)
+        && data.seatNumber is string && data.seatNumber.size() >= 2 && data.seatNumber.size() <= 10 && data.seatNumber.matches('^[A-Z][0-9]{1,2}$')
+        && data.row is string && data.row.size() >= 1 && data.row.size() <= 5
+        && data.col is number && data.col >= 1 && data.col <= 30
+        && data.status in ['AVAILABLE', 'HELD', 'RESERVED', 'BOOKED', 'BLOCKED']
+        && (!('heldByUid' in data) || data.heldByUid == null || (data.heldByUid is string && data.heldByUid.size() <= 128))
+        && (!('holdExpiresAt' in data) || data.holdExpiresAt == null || data.holdExpiresAt is timestamp)
+        && (!('bookingId' in data) || data.bookingId == null || (data.bookingId is string && data.bookingId.size() <= 128))
+        && (!('blockedReason' in data) || data.blockedReason == null || (data.blockedReason is string && data.blockedReason.size() <= 200))
+        && data.updatedAt is timestamp;
+    }
+
+    function isValidBooking(data) {
+      return data.keys().hasAll(['bookingId', 'screeningId', 'movieTitle', 'date', 'startTime', 'customerId', 'customerName', 'customerEmail', 'customerPhone', 'seatNumbers', 'ticketPrice', 'ticketCount', 'ticketSubtotal', 'mocktailSubtotal', 'grandTotal', 'paymentStatus', 'bookingStatus', 'createdAt', 'updatedAt'])
+        && data.keys().hasOnly(['bookingId', 'screeningId', 'movieTitle', 'date', 'startTime', 'customerId', 'customerName', 'customerEmail', 'customerPhone', 'seatNumbers', 'ticketPrice', 'ticketCount', 'ticketSubtotal', 'mocktailSubtotal', 'discountType', 'discountValue', 'discountAmount', 'discountReason', 'complimentaryDrinks', 'grandTotal', 'paymentStatus', 'bookingStatus', 'upiTransactionRef', 'paymentMethod', 'adminNotes', 'refundStatus', 'createdAt', 'updatedAt'])
+        && isValidId(data.bookingId)
+        && isValidId(data.screeningId)
+        && data.movieTitle is string && data.movieTitle.size() >= 1 && data.movieTitle.size() <= 180
+        && data.date is string && data.date.size() <= 20
+        && data.startTime is string && data.startTime.size() <= 30
+        && data.customerId is string && data.customerId.size() >= 1 && data.customerId.size() <= 128
+        && data.customerName is string && data.customerName.size() >= 1 && data.customerName.size() <= 150
+        && data.customerEmail is string && data.customerEmail.size() >= 5 && data.customerEmail.size() <= 200
+        && data.customerPhone is string && data.customerPhone.size() <= 30
+        && data.seatNumbers is list && data.seatNumbers.size() >= 1 && data.seatNumbers.size() <= 36 && data.seatNumbers[0] is string
+        && data.ticketPrice is number && data.ticketPrice >= 0
+        && data.ticketCount is number && data.ticketCount >= 1 && data.ticketCount <= 36
+        && data.ticketSubtotal is number && data.ticketSubtotal >= 0
+        && data.mocktailSubtotal is number && data.mocktailSubtotal >= 0
+        && (!('discountType' in data) || data.discountType in ['NONE', 'FLAT', 'PERCENT'])
+        && (!('discountValue' in data) || (data.discountValue is number && data.discountValue >= 0 && data.discountValue <= 100000))
+        && (!('discountAmount' in data) || (data.discountAmount is number && data.discountAmount >= 0 && data.discountAmount <= 100000))
+        && (!('discountReason' in data) || (data.discountReason is string && data.discountReason.size() <= 200))
+        && (!('complimentaryDrinks' in data) || data.complimentaryDrinks is bool)
+        && data.grandTotal is number && data.grandTotal >= 0
+        && data.paymentStatus in ['PENDING', 'PENDING_VERIFICATION', 'VERIFIED', 'FAILED', 'CANCELLED', 'REFUNDED']
+        && data.bookingStatus in ['HOLD', 'PENDING_VERIFICATION', 'CONFIRMED', 'CANCELLED']
+        && (!('upiTransactionRef' in data) || (data.upiTransactionRef is string && data.upiTransactionRef.size() <= 120))
+        && (!('paymentMethod' in data) || (data.paymentMethod is string && data.paymentMethod.size() <= 40))
+        && (!('adminNotes' in data) || (data.adminNotes is string && data.adminNotes.size() <= 500))
+        && (!('refundStatus' in data) || (data.refundStatus is string && data.refundStatus.size() <= 30))
+        && data.createdAt is timestamp
+        && data.updatedAt is timestamp;
+    }
+
+    function isValidPayment(data) {
+      return data.keys().hasAll(['paymentId', 'bookingId', 'screeningId', 'customerId', 'customerName', 'customerEmail', 'amount', 'method', 'status', 'createdAt', 'updatedAt'])
+        && data.keys().hasOnly(['paymentId', 'bookingId', 'screeningId', 'customerId', 'customerName', 'customerEmail', 'amount', 'method', 'status', 'transactionRef', 'gatewayOrderId', 'gatewayPaymentId', 'verifiedBy', 'verifiedAt', 'notes', 'createdAt', 'updatedAt'])
+        && isValidId(data.paymentId)
+        && isValidId(data.bookingId)
+        && isValidId(data.screeningId)
+        && data.customerId is string && data.customerId.size() <= 128
+        && data.customerName is string && data.customerName.size() <= 150
+        && data.customerEmail is string && data.customerEmail.size() <= 200
+        && data.amount is number && data.amount >= 0
+        && data.method is string && data.method.size() <= 40
+        && data.status in ['PENDING', 'PENDING_VERIFICATION', 'VERIFIED', 'REJECTED', 'FAILED', 'REFUNDED']
+        && (!('transactionRef' in data) || (data.transactionRef is string && data.transactionRef.size() <= 120))
+        && (!('gatewayOrderId' in data) || (data.gatewayOrderId is string && data.gatewayOrderId.size() <= 120))
+        && (!('gatewayPaymentId' in data) || (data.gatewayPaymentId is string && data.gatewayPaymentId.size() <= 120))
+        && (!('verifiedBy' in data) || (data.verifiedBy is string && data.verifiedBy.size() <= 200))
+        && (!('verifiedAt' in data) || data.verifiedAt == null || data.verifiedAt is timestamp)
+        && (!('notes' in data) || (data.notes is string && data.notes.size() <= 500))
+        && data.createdAt is timestamp
+        && data.updatedAt is timestamp;
+    }
+
+    function isValidTicket(data) {
+      return data.keys().hasAll(['ticketId', 'bookingId', 'screeningId', 'customerId', 'customerName', 'customerEmail', 'movieTitle', 'date', 'startTime', 'seatNumbers', 'mocktailSummary', 'grandTotal', 'qrPayload', 'ticketStatus', 'createdAt', 'updatedAt'])
+        && data.keys().hasOnly(['ticketId', 'bookingId', 'screeningId', 'customerId', 'customerName', 'customerEmail', 'movieTitle', 'date', 'startTime', 'seatNumbers', 'mocktailSummary', 'discountAmount', 'discountReason', 'complimentaryDrinks', 'grandTotal', 'qrPayload', 'ticketStatus', 'checkedInAt', 'checkedInBy', 'createdAt', 'updatedAt'])
+        && isValidId(data.ticketId)
+        && isValidId(data.bookingId)
+        && isValidId(data.screeningId)
+        && data.customerId is string && data.customerId.size() <= 128
+        && data.customerName is string && data.customerName.size() <= 150
+        && data.customerEmail is string && data.customerEmail.size() <= 200
+        && data.movieTitle is string && data.movieTitle.size() <= 180
+        && data.date is string && data.date.size() <= 20
+        && data.startTime is string && data.startTime.size() <= 30
+        && data.seatNumbers is list && data.seatNumbers.size() >= 1 && data.seatNumbers.size() <= 36 && data.seatNumbers[0] is string
+        && data.mocktailSummary is string && data.mocktailSummary.size() <= 1000
+        && (!('discountAmount' in data) || (data.discountAmount is number && data.discountAmount >= 0 && data.discountAmount <= 100000))
+        && (!('discountReason' in data) || (data.discountReason is string && data.discountReason.size() <= 200))
+        && (!('complimentaryDrinks' in data) || data.complimentaryDrinks is bool)
+        && data.grandTotal is number && data.grandTotal >= 0
+        && data.qrPayload is string && data.qrPayload.size() <= 500
+        && data.ticketStatus in ['VALID', 'USED', 'CANCELLED']
+        && (!('checkedInAt' in data) || data.checkedInAt == null || data.checkedInAt is timestamp)
+        && (!('checkedInBy' in data) || data.checkedInBy == null || (data.checkedInBy is string && data.checkedInBy.size() <= 200))
+        && data.createdAt is timestamp
+        && data.updatedAt is timestamp;
+    }
+
+    function isValidTicketSecurity(data) {
+      return data.keys().hasAll(['secureTokenHash', 'ticketId', 'createdAt'])
+        && data.keys().hasOnly(['secureTokenHash', 'ticketId', 'createdAt'])
+        && data.secureTokenHash is string && data.secureTokenHash.size() >= 32 && data.secureTokenHash.size() <= 128
+        && isValidId(data.ticketId)
+        && data.createdAt is timestamp;
+    }
+
+    function isValidMocktailProduct(data) {
+      return data.keys().hasAll(['productId', 'name', 'description', 'price', 'imageUrl', 'enabled', 'createdAt', 'updatedAt'])
+        && data.keys().hasOnly(['productId', 'name', 'description', 'price', 'imageUrl', 'enabled', 'createdAt', 'updatedAt'])
+        && isValidId(data.productId)
+        && data.name is string && data.name.size() >= 1 && data.name.size() <= 120
+        && data.description is string && data.description.size() <= 500
+        && data.price is number && data.price >= 0 && data.price <= 50000
+        && data.imageUrl is string && data.imageUrl.size() <= 200000
+        && data.enabled is bool
+        && data.createdAt is timestamp
+        && data.updatedAt is timestamp;
+    }
+
+    function isValidMocktailOrder(data) {
+      return data.keys().hasAll(['orderId', 'bookingId', 'screeningId', 'customerId', 'customerName', 'date', 'startTime', 'items', 'subtotal', 'paymentStatus', 'deliveryStatus', 'createdAt', 'updatedAt'])
+        && data.keys().hasOnly(['orderId', 'bookingId', 'screeningId', 'customerId', 'customerName', 'date', 'startTime', 'items', 'subtotal', 'paymentStatus', 'deliveryStatus', 'createdAt', 'updatedAt'])
+        && isValidId(data.orderId)
+        && isValidId(data.bookingId)
+        && isValidId(data.screeningId)
+        && data.customerId is string && data.customerId.size() <= 128
+        && data.customerName is string && data.customerName.size() <= 150
+        && data.date is string && data.date.size() <= 20
+        && data.startTime is string && data.startTime.size() <= 30
+        && data.items is list && data.items.size() <= 50
+        && data.subtotal is number && data.subtotal >= 0
+        && data.paymentStatus is string && data.paymentStatus.size() <= 30
+        && data.deliveryStatus in ['PENDING_PAYMENT', 'PREPARING', 'READY', 'DELIVERED', 'CANCELLED']
+        && data.createdAt is timestamp
+        && data.updatedAt is timestamp;
+    }
+
+    function isValidMocktailAssignment(data) {
+      return data.keys().hasAll(['assignmentId', 'bookingId', 'screeningId', 'customerId', 'customerName', 'date', 'startTime', 'seatNumber', 'productId', 'productName', 'quantity', 'unitPrice', 'paymentStatus', 'deliveryStatus', 'createdAt', 'updatedAt'])
+        && data.keys().hasOnly(['assignmentId', 'bookingId', 'screeningId', 'customerId', 'customerName', 'date', 'startTime', 'seatNumber', 'productId', 'productName', 'quantity', 'unitPrice', 'paymentStatus', 'deliveryStatus', 'createdAt', 'updatedAt'])
+        && isValidId(data.assignmentId)
+        && isValidId(data.bookingId)
+        && isValidId(data.screeningId)
+        && data.customerId is string && data.customerId.size() <= 128
+        && data.customerName is string && data.customerName.size() <= 150
+        && data.date is string && data.date.size() <= 20
+        && data.startTime is string && data.startTime.size() <= 30
+        && data.seatNumber is string && data.seatNumber.size() <= 10
+        && isValidId(data.productId)
+        && data.productName is string && data.productName.size() <= 120
+        && data.quantity is number && data.quantity >= 1 && data.quantity <= 20
+        && data.unitPrice is number && data.unitPrice >= 0
+        && data.paymentStatus is string && data.paymentStatus.size() <= 30
+        && data.deliveryStatus in ['PENDING_PAYMENT', 'PREPARING', 'READY', 'DELIVERED', 'CANCELLED']
+        && data.createdAt is timestamp
+        && data.updatedAt is timestamp;
+    }
+
+    function isValidRefund(data) {
+      return data.keys().hasAll(['refundId', 'bookingId', 'screeningId', 'customerId', 'customerName', 'customerEmail', 'amount', 'reason', 'refundStatus', 'notificationStatus', 'processedBy', 'createdAt', 'updatedAt'])
+        && data.keys().hasOnly(['refundId', 'bookingId', 'screeningId', 'customerId', 'customerName', 'customerEmail', 'amount', 'reason', 'refundStatus', 'notificationStatus', 'processedBy', 'createdAt', 'updatedAt'])
+        && isValidId(data.refundId)
+        && isValidId(data.bookingId)
+        && isValidId(data.screeningId)
+        && data.customerId is string && data.customerId.size() <= 128
+        && data.customerName is string && data.customerName.size() <= 150
+        && data.customerEmail is string && data.customerEmail.size() <= 200
+        && data.amount is number && data.amount >= 0
+        && data.reason is string && data.reason.size() <= 500
+        && data.refundStatus in ['PENDING', 'PROCESSED', 'NOT_APPLICABLE']
+        && data.notificationStatus in ['PENDING', 'SENT']
+        && data.processedBy is string && data.processedBy.size() <= 200
+        && data.createdAt is timestamp
+        && data.updatedAt is timestamp;
+    }
+
+    function isHexColor(val) {
+      return val is string && val.matches('^#[0-9A-Fa-f]{6}$');
+    }
+
+    function isValidTheme(theme) {
+      return theme is map
+        && theme.keys().hasAll(['presetId', 'primary', 'primaryHover', 'dark', 'darkDeep', 'accent', 'accentLight', 'bg', 'surface', 'surfaceAlt', 'text', 'muted'])
+        && theme.keys().hasOnly(['presetId', 'primary', 'primaryHover', 'dark', 'darkDeep', 'accent', 'accentLight', 'bg', 'surface', 'surfaceAlt', 'text', 'muted'])
+        && theme.presetId is string && theme.presetId.size() >= 1 && theme.presetId.size() <= 40
+        && isHexColor(theme.primary)
+        && isHexColor(theme.primaryHover)
+        && isHexColor(theme.dark)
+        && isHexColor(theme.darkDeep)
+        && isHexColor(theme.accent)
+        && isHexColor(theme.accentLight)
+        && isHexColor(theme.bg)
+        && isHexColor(theme.surface)
+        && isHexColor(theme.surfaceAlt)
+        && isHexColor(theme.text)
+        && isHexColor(theme.muted);
+    }
+
+    function isValidWebsiteSetting(data) {
+      return data.keys().hasAll(['cinemaName', 'updatedAt'])
+        && data.keys().hasOnly(['cinemaName', 'logoUrl', 'heroBannerUrl', 'announcementText', 'contactNumber', 'contactEmail', 'cinemaAddress', 'instagramUrl', 'facebookUrl', 'youtubeUrl', 'bookingPolicies', 'footerText', 'theme', 'updatedAt'])
+        && data.cinemaName is string && data.cinemaName.size() >= 1 && data.cinemaName.size() <= 150
+        && (!('logoUrl' in data) || (data.logoUrl is string && data.logoUrl.size() <= 800000))
+        && (!('heroBannerUrl' in data) || (data.heroBannerUrl is string && data.heroBannerUrl.size() <= 800000))
+        && (!('announcementText' in data) || (data.announcementText is string && data.announcementText.size() <= 300))
+        && (!('contactNumber' in data) || (data.contactNumber is string && data.contactNumber.size() <= 60))
+        && (!('contactEmail' in data) || (data.contactEmail is string && data.contactEmail.size() <= 200))
+        && (!('cinemaAddress' in data) || (data.cinemaAddress is string && data.cinemaAddress.size() <= 500))
+        && (!('instagramUrl' in data) || (data.instagramUrl is string && data.instagramUrl.size() <= 500))
+        && (!('facebookUrl' in data) || (data.facebookUrl is string && data.facebookUrl.size() <= 500))
+        && (!('youtubeUrl' in data) || (data.youtubeUrl is string && data.youtubeUrl.size() <= 500))
+        && (!('bookingPolicies' in data) || (data.bookingPolicies is string && data.bookingPolicies.size() <= 3000))
+        && (!('footerText' in data) || (data.footerText is string && data.footerText.size() <= 500))
+        && (!('theme' in data) || isValidTheme(data.theme))
+        && data.updatedAt is timestamp;
+    }
+
+    function isValidPaymentSettingPublic(data) {
+      return data.keys().hasAll(['isConfigured', 'mode', 'testMode', 'updatedAt'])
+        && data.keys().hasOnly(['isConfigured', 'mode', 'upiId', 'displayName', 'qrImageUrl', 'instructions', 'providerName', 'testMode', 'updatedAt'])
+        && data.isConfigured is bool
+        && data.mode in ['UNCONFIGURED', 'MANUAL_UPI', 'AUTOMATIC_GATEWAY']
+        && (!('upiId' in data) || (data.upiId is string && data.upiId.size() <= 150))
+        && (!('displayName' in data) || (data.displayName is string && data.displayName.size() <= 150))
+        && (!('qrImageUrl' in data) || (data.qrImageUrl is string && data.qrImageUrl.size() <= 800000))
+        && (!('instructions' in data) || (data.instructions is string && data.instructions.size() <= 1000))
+        && (!('providerName' in data) || (data.providerName is string && data.providerName.size() <= 100))
+        && data.testMode is bool
+        && data.updatedAt is timestamp;
+    }
+
+    function isValidPaymentSettingPrivate(data) {
+      return data.keys().hasAll(['updatedBy', 'updatedAt'])
+        && data.keys().hasOnly(['gatewayKeyId', 'gatewayKeySecret', 'webhookSecret', 'updatedBy', 'updatedAt'])
+        && (!('gatewayKeyId' in data) || (data.gatewayKeyId is string && data.gatewayKeyId.size() <= 200))
+        && (!('gatewayKeySecret' in data) || (data.gatewayKeySecret is string && data.gatewayKeySecret.size() <= 500))
+        && (!('webhookSecret' in data) || (data.webhookSecret is string && data.webhookSecret.size() <= 500))
+        && data.updatedBy is string && data.updatedBy.size() <= 200
+        && data.updatedAt is timestamp;
+    }
+
+    function isValidAuditLog(data) {
+      return data.keys().hasAll(['logId', 'action', 'actorEmail', 'actorUid', 'targetType', 'targetId', 'details', 'createdAt'])
+        && data.keys().hasOnly(['logId', 'action', 'actorEmail', 'actorUid', 'targetType', 'targetId', 'details', 'createdAt'])
+        && isValidId(data.logId)
+        && data.action is string && data.action.size() <= 100
+        && data.actorEmail is string && data.actorEmail.size() <= 200
+        && data.actorUid is string && data.actorUid.size() <= 128
+        && data.targetType is string && data.targetType.size() <= 60
+        && data.targetId is string && data.targetId.size() <= 128
+        && data.details is string && data.details.size() <= 1000
+        && data.createdAt is timestamp;
+    }
+
+    function isValidSystemInit(data) {
+      return data.keys().hasAll(['initialized', 'initializedBy', 'initializedAt'])
+        && data.keys().hasOnly(['initialized', 'initializedBy', 'initializedAt'])
+        && data.initialized is bool
+        && data.initializedBy is string && data.initializedBy.size() <= 200
+        && data.initializedAt is timestamp;
+    }
+
+    // Collection Rules
+
+    match /admins/{adminEmail} {
+      allow get: if isValidEmailId(adminEmail) && isAdmin();
+      allow list: if isAdmin();
+      allow create: if isValidEmailId(adminEmail) && hasAdminFeature('manageAccessFeatures') && isValidAdmin(incoming()) && (adminEmail != 'mypersonaluse2013@gmail.com' || (incoming().role == 'SUPER_ADMIN' && incoming().active == true)) && incoming().createdAt == request.time && incoming().updatedAt == request.time;
+      allow update: if isValidEmailId(adminEmail) && hasAdminFeature('manageAccessFeatures') && isValidAdmin(incoming()) && (adminEmail != 'mypersonaluse2013@gmail.com' || (incoming().role == 'SUPER_ADMIN' && incoming().active == true)) && incoming().createdAt == existing().createdAt && incoming().updatedAt == request.time;
+      allow delete: if isValidEmailId(adminEmail) && hasAdminFeature('manageAccessFeatures') && adminEmail != 'mypersonaluse2013@gmail.com';
+    }
+
+    match /users/{uid} {
+      allow get: if isValidId(uid) && ((isSignedIn() && request.auth.uid == uid) || isAdmin());
+      allow list: if (isSignedIn() && resource.data.uid == request.auth.uid) || isAdmin();
+      allow create: if isValidId(uid) && isVerifiedUser() && request.auth.uid == uid && isValidUser(incoming()) && incoming().createdAt == request.time && incoming().updatedAt == request.time;
+      allow update: if isValidId(uid) && isVerifiedUser() && request.auth.uid == uid && isValidUser(incoming()) && incoming().uid == existing().uid && incoming().createdAt == existing().createdAt && incoming().updatedAt == request.time;
+      allow delete: if false;
+    }
+
+    match /movies/{movieId} {
+      allow get: if isValidId(movieId);
+      allow list: if true;
+      allow create: if isValidId(movieId) && (hasAdminFeature('manageMovies') || hasAdminFeature('manageShowPosters')) && isValidMovie(incoming()) && incoming().updatedAt == request.time;
+      allow update: if isValidId(movieId) && (hasAdminFeature('manageMovies') || hasAdminFeature('manageShowPosters')) && isValidMovie(incoming()) && incoming().movieId == existing().movieId && incoming().updatedAt == request.time;
+      allow delete: if isValidId(movieId) && hasAdminFeature('manageMovies');
+    }
+
+    match /castMembers/{castId} {
+      allow get: if isValidId(castId);
+      allow list: if true;
+      allow create: if isValidId(castId) && hasAdminFeature('manageMovies') && isValidCastMember(incoming()) && incoming().createdAt == request.time && incoming().updatedAt == request.time;
+      allow update: if isValidId(castId) && hasAdminFeature('manageMovies') && isValidCastMember(incoming()) && incoming().castId == existing().castId && incoming().createdAt == existing().createdAt && incoming().updatedAt == request.time;
+      allow delete: if isValidId(castId) && hasAdminFeature('manageMovies');
+    }
+
+    match /screenings/{screeningId} {
+      allow get: if isValidId(screeningId);
+      allow list: if true;
+      allow create: if isValidId(screeningId) && hasAdminFeature('addShows') && isValidScreening(incoming()) && incoming().createdAt == request.time && incoming().updatedAt == request.time;
+      allow update: if isValidId(screeningId) && (
+        hasAdminFeature('manageShowTimings') ||
+        hasAdminFeature('manageShowPosters') ||
+        hasAdminFeature('removeShows') ||
+        hasAdminFeature('manageBookingsAndPayments') ||
+        (hasAdminFeature('manageRowPricing') && incoming().diff(existing()).affectedKeys().hasOnly(['rowPrices', 'ticketPrice', 'updatedAt']))
+      ) && isValidScreening(incoming()) && incoming().screeningId == existing().screeningId && incoming().createdAt == existing().createdAt && incoming().updatedAt == request.time;
+      allow delete: if isValidId(screeningId) && hasAdminFeature('removeShows');
+    }
+
+    match /seats/{seatDocId} {
+      allow get: if isValidId(seatDocId);
+      allow list: if true;
+      allow create: if isValidId(seatDocId) && isAdmin() && isValidSeat(incoming()) && incoming().updatedAt == request.time;
+      allow update: if isValidId(seatDocId) && isValidSeat(incoming()) && incoming().seatDocId == existing().seatDocId && incoming().screeningId == existing().screeningId && incoming().seatNumber == existing().seatNumber && incoming().updatedAt == request.time && (
+        isAdmin() ||
+        (
+          isVerifiedUser() &&
+          incoming().diff(existing()).affectedKeys().hasOnly(['status', 'heldByUid', 'holdExpiresAt', 'bookingId', 'updatedAt']) &&
+          (
+            // Customer placing or updating a temporary hold on an AVAILABLE or expired HELD seat or their own HELD seat
+            (
+              incoming().status == 'HELD' &&
+              incoming().heldByUid == request.auth.uid &&
+              incoming().holdExpiresAt is timestamp &&
+              incoming().holdExpiresAt > request.time &&
+              incoming().holdExpiresAt <= request.time + duration.value(15, 'm') &&
+              (
+                existing().status == 'AVAILABLE' ||
+                (existing().status == 'HELD' && existing().holdExpiresAt < request.time) ||
+                (existing().status == 'HELD' && existing().heldByUid == request.auth.uid)
+              )
+            ) ||
+            // Customer submitting UPI reference -> RESERVED (with valid booking belonging to user)
+            (
+              incoming().status == 'RESERVED' &&
+              incoming().heldByUid == request.auth.uid &&
+              incoming().bookingId is string &&
+              (
+                existing().status == 'AVAILABLE' ||
+                (existing().status == 'HELD' && existing().holdExpiresAt < request.time) ||
+                (existing().status == 'HELD' && existing().heldByUid == request.auth.uid)
+              )
+            ) ||
+            // Customer releasing their own temporary hold back to AVAILABLE
+            (
+              incoming().status == 'AVAILABLE' &&
+              incoming().heldByUid == null &&
+              incoming().holdExpiresAt == null &&
+              incoming().bookingId == null &&
+              existing().status == 'HELD' &&
+              existing().heldByUid == request.auth.uid
+            )
+          )
+        )
+      );
+      allow delete: if isValidId(seatDocId) && isAdmin();
+    }
+
+    match /bookings/{bookingId} {
+      allow get: if isValidId(bookingId) && ((isSignedIn() && existing().customerId == request.auth.uid) || isAdmin());
+      allow list: if (isSignedIn() && resource.data.customerId == request.auth.uid) || isAdmin();
+      allow create: if isValidId(bookingId)
+        && isVerifiedUser()
+        && isValidBooking(incoming())
+        && incoming().customerId == request.auth.uid
+        && incoming().paymentStatus in ['PENDING', 'PENDING_VERIFICATION']
+        && incoming().bookingStatus in ['HOLD', 'PENDING_VERIFICATION']
+        && (!('discountType' in incoming()) || incoming().discountType == 'NONE')
+        && (!('discountAmount' in incoming()) || incoming().discountAmount == 0)
+        && (!('complimentaryDrinks' in incoming()) || incoming().complimentaryDrinks == false)
+        && exists(/databases/$(database)/documents/screenings/$(incoming().screeningId))
+        && get(/databases/$(database)/documents/screenings/$(incoming().screeningId)).data.salesStatus == 'OPEN'
+        && incoming().createdAt == request.time
+        && incoming().updatedAt == request.time;
+      allow update: if isValidId(bookingId)
+        && isValidBooking(incoming())
+        && incoming().bookingId == existing().bookingId
+        && incoming().screeningId == existing().screeningId
+        && incoming().customerId == existing().customerId
+        && incoming().createdAt == existing().createdAt
+        && incoming().updatedAt == request.time
+        && (
+          isAdmin() ||
+          (
+            isVerifiedUser() &&
+            existing().customerId == request.auth.uid &&
+            existing().bookingStatus != 'CANCELLED' &&
+            existing().paymentStatus in ['PENDING', 'PENDING_VERIFICATION'] &&
+            (
+              (
+                incoming().diff(existing()).affectedKeys().hasOnly(['upiTransactionRef', 'paymentMethod', 'paymentStatus', 'bookingStatus', 'updatedAt']) &&
+                incoming().paymentStatus == 'PENDING_VERIFICATION' &&
+                incoming().bookingStatus == 'PENDING_VERIFICATION'
+              ) ||
+              (
+                incoming().diff(existing()).affectedKeys().hasOnly(['paymentStatus', 'bookingStatus', 'updatedAt']) &&
+                existing().paymentStatus == 'PENDING' &&
+                incoming().paymentStatus == 'CANCELLED' &&
+                incoming().bookingStatus == 'CANCELLED'
+              )
+            )
+          )
+        );
+      allow delete: if false;
+    }
+
+    match /payments/{paymentId} {
+      allow get: if isValidId(paymentId) && ((isSignedIn() && existing().customerId == request.auth.uid) || isAdmin());
+      allow list: if (isSignedIn() && resource.data.customerId == request.auth.uid) || isAdmin();
+      allow create: if isValidId(paymentId)
+        && isVerifiedUser()
+        && isValidPayment(incoming())
+        && incoming().customerId == request.auth.uid
+        && incoming().status in ['PENDING', 'PENDING_VERIFICATION']
+        && exists(/databases/$(database)/documents/bookings/$(incoming().bookingId))
+        && incoming().createdAt == request.time
+        && incoming().updatedAt == request.time;
+      allow update: if isValidId(paymentId)
+        && isValidPayment(incoming())
+        && incoming().paymentId == existing().paymentId
+        && incoming().bookingId == existing().bookingId
+        && incoming().customerId == existing().customerId
+        && incoming().createdAt == existing().createdAt
+        && incoming().updatedAt == request.time
+        && (
+          isAdmin() ||
+          (
+            isVerifiedUser() &&
+            existing().customerId == request.auth.uid &&
+            existing().status == 'PENDING' &&
+            incoming().diff(existing()).affectedKeys().hasOnly(['transactionRef', 'status', 'updatedAt']) &&
+            incoming().status == 'PENDING_VERIFICATION'
+          )
+        );
+      allow delete: if false;
+    }
+
+    match /tickets/{ticketId} {
+      allow get: if isValidId(ticketId) && ((isSignedIn() && existing().customerId == request.auth.uid) || isAdmin());
+      allow list: if (isSignedIn() && resource.data.customerId == request.auth.uid) || isAdmin();
+      allow create: if isValidId(ticketId) && isAdmin() && isValidTicket(incoming()) && incoming().createdAt == request.time && incoming().updatedAt == request.time;
+      allow update: if isValidId(ticketId) && isAdmin() && isValidTicket(incoming()) && incoming().ticketId == existing().ticketId && incoming().bookingId == existing().bookingId && incoming().createdAt == existing().createdAt && incoming().updatedAt == request.time;
+      allow delete: if false;
+
+      match /security/{secId} {
+        allow get: if isValidId(ticketId) && isValidId(secId) && isAdmin();
+        allow list: if isAdmin();
+        allow create: if isValidId(ticketId) && isValidId(secId) && isAdmin() && isValidTicketSecurity(incoming()) && incoming().createdAt == request.time;
+        allow update: if false;
+        allow delete: if false;
+      }
+    }
+
+    match /mocktailProducts/{productId} {
+      allow get: if isValidId(productId);
+      allow list: if true;
+      allow create: if isValidId(productId) && isAdmin() && isValidMocktailProduct(incoming()) && incoming().createdAt == request.time && incoming().updatedAt == request.time;
+      allow update: if isValidId(productId) && isAdmin() && isValidMocktailProduct(incoming()) && incoming().productId == existing().productId && incoming().createdAt == existing().createdAt && incoming().updatedAt == request.time;
+      allow delete: if isValidId(productId) && isAdmin();
+    }
+
+    match /mocktailOrders/{orderId} {
+      allow get: if isValidId(orderId) && ((isSignedIn() && existing().customerId == request.auth.uid) || isAdmin());
+      allow list: if (isSignedIn() && resource.data.customerId == request.auth.uid) || isAdmin();
+      allow create: if isValidId(orderId)
+        && isVerifiedUser()
+        && isValidMocktailOrder(incoming())
+        && incoming().customerId == request.auth.uid
+        && incoming().deliveryStatus == 'PENDING_PAYMENT'
+        && incoming().paymentStatus in ['PENDING', 'PENDING_VERIFICATION']
+        && incoming().createdAt == request.time
+        && incoming().updatedAt == request.time;
+      allow update: if isValidId(orderId)
+        && isAdmin()
+        && isValidMocktailOrder(incoming())
+        && incoming().orderId == existing().orderId
+        && incoming().bookingId == existing().bookingId
+        && incoming().createdAt == existing().createdAt
+        && incoming().updatedAt == request.time;
+      allow delete: if false;
+    }
+
+    match /mocktailAssignments/{assignmentId} {
+      allow get: if isValidId(assignmentId) && ((isSignedIn() && existing().customerId == request.auth.uid) || isAdmin());
+      allow list: if (isSignedIn() && resource.data.customerId == request.auth.uid) || isAdmin();
+      allow create: if isValidId(assignmentId)
+        && isVerifiedUser()
+        && isValidMocktailAssignment(incoming())
+        && incoming().customerId == request.auth.uid
+        && incoming().deliveryStatus == 'PENDING_PAYMENT'
+        && incoming().paymentStatus in ['PENDING', 'PENDING_VERIFICATION']
+        && incoming().createdAt == request.time
+        && incoming().updatedAt == request.time;
+      allow update: if isValidId(assignmentId)
+        && isAdmin()
+        && isValidMocktailAssignment(incoming())
+        && incoming().assignmentId == existing().assignmentId
+        && incoming().bookingId == existing().bookingId
+        && incoming().createdAt == existing().createdAt
+        && incoming().updatedAt == request.time;
+      allow delete: if false;
+    }
+
+    match /refunds/{refundId} {
+      allow get: if isValidId(refundId) && ((isSignedIn() && existing().customerId == request.auth.uid) || isAdmin());
+      allow list: if (isSignedIn() && resource.data.customerId == request.auth.uid) || isAdmin();
+      allow create: if isValidId(refundId) && isAdmin() && isValidRefund(incoming()) && incoming().createdAt == request.time && incoming().updatedAt == request.time;
+      allow update: if isValidId(refundId) && isAdmin() && isValidRefund(incoming()) && incoming().refundId == existing().refundId && incoming().createdAt == existing().createdAt && incoming().updatedAt == request.time;
+      allow delete: if false;
+    }
+
+    match /websiteSettings/{settingId} {
+      allow get: if isValidId(settingId);
+      allow list: if true;
+      allow create: if isValidId(settingId) && hasAdminFeature('manageWebsiteSettings') && isValidWebsiteSetting(incoming()) && incoming().updatedAt == request.time;
+      allow update: if isValidId(settingId) && (
+        hasAdminFeature('manageWebsiteSettings') ||
+        (hasAdminFeature('manageTheme') && incoming().diff(existing()).affectedKeys().hasOnly(['theme', 'updatedAt']))
+      ) && isValidWebsiteSetting(incoming()) && incoming().updatedAt == request.time;
+      allow delete: if false;
+    }
+
+    match /paymentSettings/{settingId} {
+      allow get: if (settingId == 'public') || (settingId == 'private' && hasAdminFeature('managePaymentSettings'));
+      allow list: if isAdmin();
+      allow create: if hasAdminFeature('managePaymentSettings') && (
+        (settingId == 'public' && isValidPaymentSettingPublic(incoming()) && incoming().updatedAt == request.time) ||
+        (settingId == 'private' && isValidPaymentSettingPrivate(incoming()) && incoming().updatedAt == request.time)
+      );
+      allow update: if hasAdminFeature('managePaymentSettings') && (
+        (settingId == 'public' && isValidPaymentSettingPublic(incoming()) && incoming().updatedAt == request.time) ||
+        (settingId == 'private' && isValidPaymentSettingPrivate(incoming()) && incoming().updatedAt == request.time)
+      );
+      allow delete: if false;
+    }
+
+    match /auditLogs/{logId} {
+      allow get: if isValidId(logId) && isAdmin();
+      allow list: if isAdmin();
+      allow create: if isValidId(logId) && isAdmin() && isValidAuditLog(incoming()) && incoming().createdAt == request.time;
+      allow update: if false;
+      allow delete: if false;
+    }
+
+    match /system/{docId} {
+      allow get: if isValidId(docId);
+      allow list: if isAdmin();
+      allow create: if isValidId(docId) && isAdmin() && isValidSystemInit(incoming()) && incoming().initializedAt == request.time;
+      allow update: if false;
+      allow delete: if false;
+    }
+
+    match /test/connection {
+      allow get: if true;
+    }
+  }
+}
